@@ -1,5 +1,5 @@
 Feature: Simple API Test with Karate
-  This feature demonstrates a basic Karatfdfs
+  This feature demonstrates a basic Kardsadsad
 
   Background:
     * url 'https://jsonplaceholder.typicode.com'

@@ -99,6 +99,9 @@ jobs:
         name: karate-summary
         path: target/karate-reports/karate-summary.html
 
+    - name: Debug GITHUB_TOKEN
+      run: echo "${{ secrets.KARATE_CICD_RW }}"
+
     - name: Comment on Pull Request
       if: ${{ env.SKIP_TESTS == 'false' }}
       uses: thollander/actions-comment-pull-request@v2

@@ -86,6 +86,13 @@ jobs:
         REPORT_URL="file://${{ github.workspace }}/target/karate-reports/karate-summary.html"
         echo "REPORT_URL=$REPORT_URL" >> $GITHUB_ENV
 
+    - name: Upload Karate HTML Report
+      if: ${{ env.SKIP_TESTS == 'false' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: karate-html-report
+        path: target/karate-reports/karate-summary.html
+
     - name: Output Report URL
       if: ${{ env.SKIP_TESTS == 'false' }}
       run: |

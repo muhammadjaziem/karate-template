@@ -109,7 +109,10 @@ jobs:
           - **Scenarios**: ${{ steps.read-json.outputs.scenariosPassed }} Passed | ${{ steps.read-json.outputs.scenariosFailed }} Failed
           - **Features**: ${{ steps.read-json.outputs.featuresPassed }} Passed | ${{ steps.read-json.outputs.featuresFailed }} Failed
           - 📝 **[View Karate Summary Report](${{ env.REPORT_URL }})**
-        GITHUB_TOKEN: ${{ env.KARATE_CICD_RW }}
+        mode: upsert
+        create_if_not_exists: true
+        GITHUB_TOKEN: ${{ secrets.KARATE_CICD_RW }}
+
 
     - name: Fail if Tests Failed
       if: ${{ env.SKIP_TESTS == 'false' && steps.read-json.outputs.testStatus == 'FAILED 🔴' }}

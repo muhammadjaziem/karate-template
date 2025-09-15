@@ -106,6 +106,18 @@ jobs:
         name: karate-summary
         path: target/karate-reports/karate-summary.html
 
+    - name: Collect Failed Test Details
+      if: ${{ env.SKIP_TESTS == 'false' }}
+      id: collect-failures
+      run: |
+        FAILURES_FILE="target/karate-reports/failed-tests.txt"
+        # Extract failed scenarios from the Karate log
+        grep -A 5 "failed:" target/karate.log > $FAILURES_FILE || true
+
+        echo "failures<<EOF" >> $GITHUB_OUTPUT
+        cat $FAILURES_FILE >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
     - name: Comment on Pull Request
       if: ${{ env.SKIP_TESTS == 'false' }}
       uses: thollander/actions-comment-pull-request@v2
@@ -116,6 +128,8 @@ jobs:
           - **Scenarios**: ${{ steps.read-json.outputs.scenariosPassed }} Passed | ${{ steps.read-json.outputs.scenariosFailed }} Failed
           - **Features**: ${{ steps.read-json.outputs.featuresPassed }} Passed | ${{ steps.read-json.outputs.featuresFailed }} Failed
           - 📝 **[View Karate Summary Report](${{ env.REPORT_URL }})**
+
+          ${{ steps.collect-failures.outputs.failures && '#### ❌ Failed Scenarios\n```bash\n' }}${{ steps.collect-failures.outputs.failures }}${{ steps.collect-failures.outputs.failures && '\n```' }}
         GITHUB_TOKEN: ${{ secrets.KARATE_CICD_RW }}
 
     - name: Fail if Tests Failed

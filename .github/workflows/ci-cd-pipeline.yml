@@ -1,4 +1,4 @@
-name: Java API Testing Pipeline
+name: Karate CI/CD
 
 on:
   pull_request:

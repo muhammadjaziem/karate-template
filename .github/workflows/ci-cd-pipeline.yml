@@ -135,6 +135,12 @@ jobs:
           ```
         GITHUB_TOKEN: ${{ secrets.KARATE_CICD_RW }}
 
+    - name: Notify Slack
+      run: |
+        curl -X POST -H 'Content-type: application/json' \
+        --data '{"text":"hello"}' \
+        ${{ secrets.SLACK_WEBHOOK }}
+
     - name: Fail if Tests Failed
       if: ${{ env.SKIP_TESTS == 'false' && steps.read-json.outputs.testStatus == 'FAILED 🔴' }}
       uses: actions/github-script@v6

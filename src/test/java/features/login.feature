@@ -1,5 +1,5 @@
 Feature: Simple API Test with Karate
-  This feature demonstrates a basic Karate tessss
+  This feature demonstrates a basic Karate tess
 
   Background:
     * url 'https://jsonplaceholder.typicode.com'
@@ -8,7 +8,7 @@ Feature: Simple API Test with Karate
     Given path 'posts'
     When method get
     Then status 200
-    And match response[0].userId == 1
+    And match response[0].userId == 2
     And match response[0].id == 1
     And match response[0].title == '#string'
 

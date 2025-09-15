@@ -8,7 +8,7 @@ Feature: Simple API Test with Karate
     Given path 'posts'
     When method get
     Then status 200
-    And match response[0].userId == 1
+    And match response[0].userId == 2
     And match response[0].id == 1
     And match response[0].title == '#string'
 
@@ -19,4 +19,4 @@ Feature: Simple API Test with Karate
     When method post
     Then status 201
     And match response.title == 'Hello Karate'
-    And match response.userId == 1
+    And match response.userId == 2

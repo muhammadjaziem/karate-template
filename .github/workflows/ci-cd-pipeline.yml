@@ -111,8 +111,13 @@ jobs:
       id: collect-failures
       run: |
         FAILURES_FILE="target/karate-reports/failed-tests.txt"
-        # Extract failed scenarios from the Karate log
-        grep -A 5 "failed:" target/karate.log > $FAILURES_FILE || true
+        jq -r '
+          if .scenariosFailed > 0 then
+            .featureSummary[] 
+            | select(.failed > 0) 
+            | .feature + ": " + (.scenarios[]? | select(.failed == true) | .name)
+          else empty end
+        ' target/karate-reports/karate-summary-json.txt > $FAILURES_FILE
 
         echo "failures<<EOF" >> $GITHUB_OUTPUT
         cat $FAILURES_FILE >> $GITHUB_OUTPUT

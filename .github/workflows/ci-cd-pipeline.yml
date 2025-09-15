@@ -110,6 +110,7 @@ jobs:
       if: ${{ env.SKIP_TESTS == 'false' }}
       id: collect-failures
       run: |
+        sudo apt-get update && sudo apt-get install -y jq
         FAILURES_FILE="target/karate-reports/failed-tests.txt"
         jq -r '
           if .scenariosFailed > 0 then
@@ -134,7 +135,155 @@ jobs:
           - **Features**: ${{ steps.read-json.outputs.featuresPassed }} Passed | ${{ steps.read-json.outputs.featuresFailed }} Failed
           - 📝 **[View Karate Summary Report](${{ env.REPORT_URL }})**
 
-          ${{ steps.collect-failures.outputs.failures && '#### ❌ Failed Scenarios\n```bash\n' }}${{ steps.collect-failures.outputs.failures }}${{ steps.collect-failures.outputs.failures && '\n```' }}
+          name: Karate CI/CD
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  setup_environment:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Get Changed Feature Files
+      id: changed-feature-files
+      uses: tj-actions/changed-files@v46.0.1
+      with:
+        files: '**.feature'
+        only_changed: true
+
+    - name: Check for Feature Files
+      id: check_feature_files
+      run: |
+        if [ "${{ steps.changed-feature-files.outputs.any_changed }}" != 'true' ]; then
+          echo "SKIP_TESTS=true" >> $GITHUB_ENV
+          echo "No feature files to test. Exiting."
+        else
+          echo "SKIP_TESTS=false" >> $GITHUB_ENV
+          echo "Changed feature files:"
+          for file in ${{ steps.changed-feature-files.outputs.all_changed_files }}; do
+            echo "$file"
+          done
+        fi
+
+    - name: Set up JDK 17
+      if: ${{ env.SKIP_TESTS == 'false' }}
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Run Karate Test
+      if: ${{ env.SKIP_TESTS == 'false' }}
+      id: run_karate_test
+      run: |
+        KARATE_OPTION="${{ steps.changed-feature-files.outputs.all_changed_files }} --tags ~@ignore"
+        mvn test -DargLine="-Xmx3g" -fae -Dmaven.test.failure.ignore=true -Dkarate.options="${KARATE_OPTION}"
+
+    - name: Read Karate JSON Result
+      id: read-json
+      if: ${{ env.SKIP_TESTS == 'false' }}
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+
+          const jsonString = fs.readFileSync('target/karate-reports/karate-summary-json.txt', 'utf8');
+          const json = JSON.parse(jsonString);
+
+          const testStatus = json.scenariosFailed > 0 || json.featuresFailed > 0 ? "FAILED 🔴" : "PASSED 🟢";
+
+          // Log outputs for debug
+          console.log(`Scenarios Passed: ${json.scenariosPassed}`);
+          console.log(`Scenarios Failed: ${json.scenariosFailed}`);
+          console.log(`Features Passed: ${json.featuresPassed}`);
+          console.log(`Features Failed: ${json.featuresFailed}`);
+          console.log(`Test Status: ${testStatus}`);
+
+          core.setOutput('scenariosFailed', json.scenariosFailed);
+          core.setOutput('scenariosPassed', json.scenariosPassed);
+          core.setOutput('featuresFailed', json.featuresFailed);
+          core.setOutput('featuresPassed', json.featuresPassed);
+          core.setOutput('testStatus', testStatus);
+
+
+    - name: Set Local Report URL
+      if: ${{ env.SKIP_TESTS == 'false' }}
+      run: |
+        REPORT_URL="file://${{ github.workspace }}/target/karate-reports/karate-summary.html"
+        echo "REPORT_URL=$REPORT_URL" >> $GITHUB_ENV
+
+    - name: Upload Karate HTML Report
+      if: ${{ env.SKIP_TESTS == 'false' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: karate-html-report
+        path: target/karate-reports/karate-summary.html
+
+    - name: Output Report URL
+      if: ${{ env.SKIP_TESTS == 'false' }}
+      run: |
+        echo "Report URL: $REPORT_URL"
+        echo "## 📝 [View Karate Summary Report]($REPORT_URL)" >> $GITHUB_STEP_SUMMARY
+
+    - name: Hide previous comments
+      uses: int128/hide-comment-action@v1
+      with:
+        contains: "🥋 Karate Test Report"
+        name: karate-summary
+        path: target/karate-reports/karate-summary.html
+
+    - name: Collect Failed Test Details
+      if: ${{ env.SKIP_TESTS == 'false' }}
+      id: collect-failures
+      run: |
+        sudo apt-get update && sudo apt-get install -y jq
+        FAILURES_FILE="target/karate-reports/failed-tests.txt"
+        jq -r '
+          if .scenariosFailed > 0 then
+            .featureSummary[] 
+            | select(.failed > 0) 
+            | .feature + ": " + (.scenarios[]? | select(.failed == true) | .name)
+          else empty end
+        ' target/karate-reports/karate-summary-json.txt > $FAILURES_FILE
+
+        echo "failures<<EOF" >> $GITHUB_OUTPUT
+        cat $FAILURES_FILE >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Comment on Pull Request
+      if: ${{ env.SKIP_TESTS == 'false' }}
+      uses: thollander/actions-comment-pull-request@v2
+      with:
+        message: |
+          ### 🥋 Karate Test Report
+          - **Status**: ${{ steps.read-json.outputs.testStatus }}
+          - **Scenarios**: ${{ steps.read-json.outputs.scenariosPassed }} Passed | ${{ steps.read-json.outputs.scenariosFailed }} Failed
+          - **Features**: ${{ steps.read-json.outputs.featuresPassed }} Passed | ${{ steps.read-json.outputs.featuresFailed }} Failed
+          - 📝 **[View Karate Summary Report](${{ env.REPORT_URL }})**
+
+          #### ❌ Failed Scenarios
+          ```bash
+          ${{ steps.collect-failures.outputs.failures }}
+          ```
+        GITHUB_TOKEN: ${{ secrets.KARATE_CICD_RW }}
+
+    - name: Fail if Tests Failed
+      if: ${{ env.SKIP_TESTS == 'false' && steps.read-json.outputs.testStatus == 'FAILED 🔴' }}
+      uses: actions/github-script@v6
+      with:
+        script: |
+          core.setFailed('Test execution completed with some failures. Exiting with status code 1.')
         GITHUB_TOKEN: ${{ secrets.KARATE_CICD_RW }}
 
     - name: Fail if Tests Failed

@@ -51,8 +51,8 @@ jobs:
       id: run_karate_test
       run: |
         KARATE_OPTION="${{ steps.changed-feature-files.outputs.all_changed_files }} --tags ~@ignore"
-        mvn test -DargLine="-Xmx3g" -fae -Dmaven.test.failure.ignore=true -Dkarate.options="${KARATE_OPTION}"
-
+        mvn test -DargLine="-Xmx3g" -fae -Dmaven.test.failure.ignore=true -Dkarate.options="${KARATE_OPTION}" | tee karate-run.log
+        
     - name: Read Karate JSON Result
       id: read-json
       if: ${{ env.SKIP_TESTS == 'false' }}
@@ -106,18 +106,12 @@ jobs:
         name: karate-summary
         path: target/karate-reports/karate-summary.html
 
-    - name: Collect Failed Test Details
+    - name: Collect Failed Test Details (Console Log)
       if: ${{ env.SKIP_TESTS == 'false' }}
       id: collect-failures
       run: |
         FAILURES_FILE="target/karate-reports/failed-tests.txt"
-        jq -r '
-          if .scenariosFailed > 0 then
-            .featureSummary[] 
-            | select(.failed > 0) 
-            | .feature + ": " + (.scenarios[]? | select(.failed == true) | .name)
-          else empty end
-        ' target/karate-reports/karate-summary-json.txt > $FAILURES_FILE
+        grep "failed:" karate-run.log > $FAILURES_FILE || true
 
         echo "failures<<EOF" >> $GITHUB_OUTPUT
         cat $FAILURES_FILE >> $GITHUB_OUTPUT
@@ -134,7 +128,10 @@ jobs:
           - **Features**: ${{ steps.read-json.outputs.featuresPassed }} Passed | ${{ steps.read-json.outputs.featuresFailed }} Failed
           - 📝 **[View Karate Summary Report](${{ env.REPORT_URL }})**
 
-          ${{ steps.collect-failures.outputs.failures && '#### ❌ Failed Scenarios\n```bash\n' }}${{ steps.collect-failures.outputs.failures }}${{ steps.collect-failures.outputs.failures && '\n```' }}
+          #### ❌ Failed Scenarios (from console log)
+          ```bash
+          ${{ steps.collect-failures.outputs.failures }}
+          ```
         GITHUB_TOKEN: ${{ secrets.KARATE_CICD_RW }}
 
     - name: Fail if Tests Failed

@@ -141,3 +141,24 @@ jobs:
       with:
         script: |
           core.setFailed('Test execution completed with some failures. Exiting with status code 1.')
+
+    - name: Prepare Copilot Review Context
+      if: ${{ env.SKIP_TESTS == 'false' }}
+      run: |
+        CONTEXT_FILE="copilot-context.txt"
+        echo "### Karate Test Results" > $CONTEXT_FILE
+        echo "- Status: ${{ steps.read-json.outputs.testStatus }}" >> $CONTEXT_FILE
+        echo "- Scenarios: ${{ steps.read-json.outputs.scenariosPassed }} Passed | ${{ steps.read-json.outputs.scenariosFailed }} Failed" >> $CONTEXT_FILE
+        echo "- Features: ${{ steps.read-json.outputs.featuresPassed }} Passed | ${{ steps.read-json.outputs.featuresFailed }} Failed" >> $CONTEXT_FILE
+        echo "" >> $CONTEXT_FILE
+        echo "#### ❌ Failed Scenarios" >> $CONTEXT_FILE
+        cat target/karate-reports/failed-tests.txt >> $CONTEXT_FILE || true
+
+    - name: GitHub Copilot Review
+      if: ${{ github.event_name == 'pull_request' }}
+      uses: github/copilot-review-action@v1
+      with:
+        github-token: ${{ secrets.KARATE_CICD_RW }}
+        review-comment: true
+        review-summary: true
+        extra-context: copilot-context.txt

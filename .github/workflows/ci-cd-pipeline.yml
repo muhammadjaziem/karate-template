@@ -111,7 +111,8 @@ jobs:
       id: collect-failures
       run: |
         FAILURES_FILE="target/karate-reports/failed-tests.txt"
-        grep "failed:" karate-run.log > $FAILURES_FILE || true
+        # Capture only scenario failure lines
+        grep "<<< FAILURE!" karate-run.log | sed 's/Error: //g' > $FAILURES_FILE || true
 
         echo "failures<<EOF" >> $GITHUB_OUTPUT
         cat $FAILURES_FILE >> $GITHUB_OUTPUT

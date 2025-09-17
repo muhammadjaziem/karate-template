@@ -141,6 +141,28 @@ jobs:
         --data '{"text":"hello"}' \
         ${{ secrets.SLACK_WEBHOOK }}
 
+    - name: Validate PR Checklist
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const body = context.payload.pull_request.body || "";
+          const required = [
+            "CI/CD check test report has been reviewed",
+            "Description of PR has been included",
+            "Correct labels have been added",
+            "Tests have been run on changes made and all tests should pass",
+            "PR has been assigned to yourself",
+            "At least 2 reviewers have been added"
+          ];
+
+          const missing = required.filter(item => !body.includes(item));
+          if (missing.length > 0) {
+            core.setFailed(`❌ Missing checklist items in PR description:\n${missing.join("\n")}`);
+          } else {
+            console.log("✅ All required checklist items found in PR.");
+          }
+
     - name: Fail if Tests Failed
       if: ${{ env.SKIP_TESTS == 'false' && steps.read-json.outputs.testStatus == 'FAILED 🔴' }}
       uses: actions/github-script@v6

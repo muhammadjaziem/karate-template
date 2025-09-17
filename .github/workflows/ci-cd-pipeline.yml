@@ -147,8 +147,10 @@ jobs:
       with:
         script: |
           const body = context.payload.pull_request.body || "";
+
+          // Each required checklist item must be checked ([x]) in the PR body
           const required = [
-            "CI/CD check test report has been reviewed",
+            "CI/CD check test report has been reviewed with no failures",
             "Description of PR has been included",
             "Correct labels have been added",
             "Tests have been run on changes made and all tests should pass",
@@ -156,11 +158,12 @@ jobs:
             "At least 2 reviewers have been added"
           ];
 
-          const missing = required.filter(item => !body.includes(item));
+          const missing = required.filter(item => !body.includes(`[x] ${item}`));
+
           if (missing.length > 0) {
-            core.setFailed(`❌ Missing checklist items in PR description:\n${missing.join("\n")}`);
+            core.setFailed(`❌ Checklist validation failed. Missing or unchecked items:\n${missing.join("\n")}`);
           } else {
-            console.log("✅ All required checklist items found in PR.");
+            console.log("✅ All required checklist items checked.");
           }
 
     - name: Fail if Tests Failed

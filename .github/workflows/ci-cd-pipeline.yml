@@ -118,8 +118,12 @@ jobs:
         cat $FAILURES_FILE >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
-    - name: Secret Scan
+    - name: Run Gitleaks Secret Scan
       uses: gitleaks/gitleaks-action@v2
+      with:
+        args: detect --source . --no-git -v
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Comment on Pull Request
       if: ${{ env.SKIP_TESTS == 'false' }}

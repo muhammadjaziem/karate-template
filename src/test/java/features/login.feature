@@ -6,6 +6,7 @@ Feature: Simple API Test with Karate
 
   Scenario: Get posts and verify response
     Given path 'posts'
+    And AWS_SECRET_ACCESS_KEY = wJalrXUtnFEMI/K7MDENG
     When method get
     Then status 200
     And match response[0].userId == 2

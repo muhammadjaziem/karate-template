@@ -161,7 +161,7 @@ jobs:
           const missing = required.filter(item => !body.includes(`[x] ${item}`));
 
           if (missing.length > 0) {
-            core.setFailed(`❌ Checklist validation failed. Missing or unchecked items:\n${missing.join("\n")}`);
+            core.setFailed(`❌ Checklist validation failed. The following items are missing or unchecked:\n${missing.map(i => `- ${i}`).join("\n")}`);
           } else {
             console.log("✅ All required checklist items checked.");
           }

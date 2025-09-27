@@ -118,6 +118,9 @@ jobs:
         cat $FAILURES_FILE >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
+    - name: Secret Scan
+      uses: gitleaks/gitleaks-action@v2
+
     - name: Comment on Pull Request
       if: ${{ env.SKIP_TESTS == 'false' }}
       uses: thollander/actions-comment-pull-request@v2
@@ -165,10 +168,6 @@ jobs:
           } else {
             console.log("✅ All required checklist items checked.");
           }
-
-    - name: Secret Scan
-      uses: gitleaks/gitleaks-action@v2
-
 
     - name: Fail if Tests Failed
       if: ${{ env.SKIP_TESTS == 'false' && steps.read-json.outputs.testStatus == 'FAILED 🔴' }}

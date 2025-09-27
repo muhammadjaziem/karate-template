@@ -3,12 +3,13 @@ Feature: Simple API Test with Karate
 
   Background:
     * url 'https://jsonplaceholder.typicode.com'
+    * AWS_SECRET_ACCESS_KEY = wJalrXUtnFEMI/K7MDENG/bPxRfiCYzEXAMPLEKEY
 
   Scenario: Get posts and verify response
     Given path 'posts'
     When method get
     Then status 200
-    And match response[0].userId == 2
+    And match response[0].userId == 3
     And match response[0].id == 1
     And match response[0].title == '#string'
 

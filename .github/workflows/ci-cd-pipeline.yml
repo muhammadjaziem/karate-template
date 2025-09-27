@@ -166,6 +166,20 @@ jobs:
             console.log("✅ All required checklist items checked.");
           }
 
+    - name: Run Tests with Coverage
+      run: mvn test -DargLine="-javaagent:jacocoagent.jar=destfile=target/jacoco.exec"
+
+    - name: Check Coverage
+      run: |
+        COVERAGE=$(mvn jacoco:report | grep -oP 'Total.*?([0-9]+)%' | tail -1 | grep -oP '[0-9]+')
+        echo "Coverage = $COVERAGE%"
+        if [ "$COVERAGE" -lt 80 ]; then
+          echo "❌ Coverage below threshold (80%)."
+          exit 1
+        else
+          echo "✅ Coverage is acceptable."
+        fi
+
     - name: Fail if Tests Failed
       if: ${{ env.SKIP_TESTS == 'false' && steps.read-json.outputs.testStatus == 'FAILED 🔴' }}
       uses: actions/github-script@v6

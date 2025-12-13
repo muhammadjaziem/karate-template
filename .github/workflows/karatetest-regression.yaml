@@ -1,4 +1,4 @@
-name: karatetest-regression-fni
+name: karatetest-regression
 # Run regression tests for all F&I services' at 8AM and 6PM from Monday through Friday
 
 on:

@@ -1,0 +1,25 @@
+name: karatetest-regression-fni
+# Run regression tests for all F&I services' at 8AM and 6PM from Monday through Friday
+
+on:
+  schedule:
+    - cron: '0 0 * * 1-5'
+    - cron: '0 10 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  run-karatetest-regression-fni:
+    runs-on: self-hosted
+    environment: staging
+
+    steps:
+      - name: Run F&I Regression Tests
+        uses: MoneyLion/actions/pod-QA/run-karate-test@main
+        with:
+          karate_options: '@regressionF&I'
+          slack_webhook_url_key: 'fraudkarateslackwebhookurl'
+          slack_message_title: 'Regression Tests F&I'

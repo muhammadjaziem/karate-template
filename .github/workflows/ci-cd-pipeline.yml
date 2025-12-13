@@ -51,7 +51,7 @@ jobs:
       id: run_karate_test
       run: |
         KARATE_OPTION="${{ steps.changed-feature-files.outputs.all_changed_files }} --tags ~@ignore"
-        mvn test -DargLine="-Xmx3g" -fae -Dmaven.test.failure.ignore=true -Dkarate.options="${KARATE_OPTION}" | tee karate-run.log
+        mvn test -DargLine="-Xmx6g" -fae -Dmaven.test.failure.ignore=true -Dkarate.options="${KARATE_OPTION} --threads 5" | tee karate-run.log
         
     - name: Read Karate JSON Result
       id: read-json

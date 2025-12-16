@@ -9,7 +9,7 @@ Feature: Simple API Test with Karate
     When method get
     Then status 200
     And match response[0].userId == 2
-    And match response[0].id == 2
+    And match response[0].id == 7
     And match response[0].title == '#string'
 
   Scenario: Create a new post

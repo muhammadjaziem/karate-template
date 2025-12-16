@@ -51,6 +51,7 @@ jobs:
       id: run_karate_test
       run: |
         KARATE_OPTION="${{ steps.changed-feature-files.outputs.all_changed_files }} --tags ~@ignore"
+        echo "KARATE_OPTIONS=$KARATE_OPTION" >> $GITHUB_ENV
         mvn -B -q clean test -DargLine="-Xmx6g" -fae -Dmaven.test.failure.ignore=true -Dkarate.options="${KARATE_OPTION} --threads 5" | tee karate-run.log
         
     - name: Read Karate JSON Result
@@ -60,25 +61,35 @@ jobs:
       with:
         script: |
           const fs = require('fs');
-
           const jsonString = fs.readFileSync('target/karate-reports/karate-summary-json.txt', 'utf8');
           const json = JSON.parse(jsonString);
-
           const testStatus = json.scenariosFailed > 0 || json.featuresFailed > 0 ? "FAILED 🔴" : "PASSED 🟢";
-
+          const slackStatus = json.scenariosFailed > 0 ? 'FAILED :red_circle:' : 'PASSED :large_green_circle:';
+          
+          // Calculate efficiency
+          const efficiency = json.threadTime > 0 ? (json.elapsedTime / json.threadTime).toFixed(2) : '0.00';
+          
           // Log outputs for debug
           console.log(`Scenarios Passed: ${json.scenariosPassed}`);
           console.log(`Scenarios Failed: ${json.scenariosFailed}`);
           console.log(`Features Passed: ${json.featuresPassed}`);
           console.log(`Features Failed: ${json.featuresFailed}`);
           console.log(`Test Status: ${testStatus}`);
-
-          core.setOutput('scenariosFailed', json.scenariosFailed);
-          core.setOutput('scenariosPassed', json.scenariosPassed);
-          core.setOutput('featuresFailed', json.featuresFailed);
-          core.setOutput('featuresPassed', json.featuresPassed);
+          console.log(`Elapsed Time: ${json.elapsedTime}s`);
+          console.log(`Threads: ${json.threads}`);
+          console.log(`Thread Time: ${json.threadTime}s`);
+          console.log(`Efficiency: ${efficiency}`);
+          
+          core.setOutput('scenariosFailed', json.scenariosFailed || 0);
+          core.setOutput('scenariosPassed', json.scenariosPassed || 0);
+          core.setOutput('featuresFailed', json.featuresFailed || 0);
+          core.setOutput('featuresPassed', json.featuresPassed || 0);
           core.setOutput('testStatus', testStatus);
-
+          core.setOutput('slackStatus', slackStatus);
+          core.setOutput('elapsedTime', json.elapsedTime || 0);
+          core.setOutput('threads', json.threads || 5);
+          core.setOutput('threadTime', json.threadTime || 0);
+          core.setOutput('efficiency', efficiency);
 
     - name: Set Local Report URL
       if: ${{ env.SKIP_TESTS == 'false' }}
@@ -103,8 +114,6 @@ jobs:
       uses: int128/hide-comment-action@v1
       with:
         contains: "🥋 Karate Test Report"
-        name: karate-summary
-        path: target/karate-reports/karate-summary.html
 
     - name: Collect Failed Test Details (Console Log)
       if: ${{ env.SKIP_TESTS == 'false' }}
@@ -113,7 +122,6 @@ jobs:
         FAILURES_FILE="target/karate-reports/failed-tests.txt"
         # Capture only scenario failure lines
         grep "<<< FAILURE!" karate-run.log | sed 's/Error: //g' > $FAILURES_FILE || true
-
         echo "failures<<EOF" >> $GITHUB_OUTPUT
         cat $FAILURES_FILE >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
@@ -135,18 +143,104 @@ jobs:
           - **Scenarios**: ${{ steps.read-json.outputs.scenariosPassed }} Passed | ${{ steps.read-json.outputs.scenariosFailed }} Failed
           - **Features**: ${{ steps.read-json.outputs.featuresPassed }} Passed | ${{ steps.read-json.outputs.featuresFailed }} Failed
           - 📝 **[View Karate Summary Report](${{ env.REPORT_URL }})**
-
           #### ❌ Failed Scenarios (from console log)
           ```bash
           ${{ steps.collect-failures.outputs.failures }}
           ```
         GITHUB_TOKEN: ${{ secrets.KARATE_CICD_RW }}
 
-    - name: Notify Slack
-      run: |
-        curl -X POST -H 'Content-type: application/json' \
-        --data '{"text":"hello"}' \
-        ${{ secrets.SLACK_WEBHOOK }}
+    - name: Format and Send Slack Notification
+      if: ${{ env.SKIP_TESTS == 'false' }}
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          
+          // Check if Slack webhook is configured
+          const webhookUrl = process.env.SLACK_WEBHOOK;
+          if (!webhookUrl || webhookUrl.trim() === '') {
+            console.log('⚠️  SLACK_WEBHOOK secret not configured. Skipping Slack notification.');
+            return;
+          }
+          
+          // Get test results from previous step
+          const slackStatus = '${{ steps.read-json.outputs.slackStatus }}';
+          const karateOptions = '${{ env.KARATE_OPTIONS }}' || 'Changed feature files';
+          const elapsedTime = '${{ steps.read-json.outputs.elapsedTime }}';
+          const threads = '${{ steps.read-json.outputs.threads }}';
+          const threadTime = '${{ steps.read-json.outputs.threadTime }}';
+          const efficiency = '${{ steps.read-json.outputs.efficiency }}';
+          const featuresPassed = '${{ steps.read-json.outputs.featuresPassed }}';
+          const featuresFailed = '${{ steps.read-json.outputs.featuresFailed }}';
+          const scenariosPassed = '${{ steps.read-json.outputs.scenariosPassed }}';
+          const scenariosFailed = '${{ steps.read-json.outputs.scenariosFailed }}';
+          
+          // Get workflow and run information
+          const workflowName = context.workflow;
+          const runId = context.runId;
+          const repo = context.repo;
+          const runUrl = `https://github.com/${repo.owner}/${repo.repo}/actions/runs/${runId}`;
+          const reportUrl = '${{ env.REPORT_URL }}';
+          
+          // Format Slack message
+          const slackMessage = `
+          ${workflowName}
+          Result: ${slackStatus}
+          Karate Tags:
+          ${karateOptions}
+          Elapsed Time: ${elapsedTime}s | Threads: ${threads} | Thread Time: ${threadTime}s | Efficiency: ${efficiency}
+          Features: Passed: ${featuresPassed} | Failed: ${featuresFailed}
+          Scenarios: Passed: ${scenariosPassed} | Failed: ${scenariosFailed}
+          :memo: <${reportUrl}|View Karate Summary Report>
+          :link: <${runUrl}|View GitHub Run Details>
+          `;
+          
+          // Send to Slack
+          const https = require('https');
+          const url = new URL(webhookUrl);
+          
+          const data = JSON.stringify({
+            text: slackMessage.trim()
+          });
+          
+          const options = {
+            hostname: url.hostname,
+            port: 443,
+            path: url.pathname + url.search,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Content-Length': data.length
+            }
+          };
+          
+          return new Promise((resolve, reject) => {
+            const req = https.request(options, (res) => {
+              let responseData = '';
+              res.on('data', (chunk) => {
+                responseData += chunk;
+              });
+              res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                  console.log('✅ Slack notification sent successfully');
+                  resolve();
+                } else {
+                  console.error(`❌ Slack notification failed: ${res.statusCode} - ${responseData}`);
+                  reject(new Error(`Slack notification failed: ${res.statusCode}`));
+                }
+              });
+            });
+            
+            req.on('error', (error) => {
+              console.error('❌ Error sending Slack notification:', error);
+              reject(error);
+            });
+            
+            req.write(data);
+            req.end();
+          });
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
 
     - name: Validate PR Checklist
       if: github.event_name == 'pull_request'
@@ -154,7 +248,6 @@ jobs:
       with:
         script: |
           const body = context.payload.pull_request.body || "";
-
           // Each required checklist item must be checked ([x]) in the PR body
           const required = [
             "CI/CD check test report has been reviewed with no failures",
@@ -164,9 +257,7 @@ jobs:
             "PR has been assigned to yourself",
             "At least 2 reviewers have been added"
           ];
-
           const missing = required.filter(item => !body.includes(`[x] ${item}`));
-
           if (missing.length > 0) {
             core.setFailed(`❌ Checklist validation failed. Missing or unchecked items:\n${missing.join("\n")}`);
           } else {
@@ -179,3 +270,4 @@ jobs:
       with:
         script: |
           core.setFailed('Test execution completed with some failures. Exiting with status code 1.')
+

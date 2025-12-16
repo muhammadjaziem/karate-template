@@ -54,6 +54,13 @@ jobs:
         echo "KARATE_OPTIONS=$KARATE_OPTION" >> $GITHUB_ENV
         mvn -B -q clean test -DargLine="-Xmx6g" -fae -Dmaven.test.failure.ignore=true -Dkarate.options="${KARATE_OPTION} --threads 5" | tee karate-run.log
         
+    - name: Debug - Show Karate JSON File
+      if: ${{ env.SKIP_TESTS == 'false' }}
+      run: |
+        echo "=== Karate JSON Summary File Contents ==="
+        cat target/karate-reports/karate-summary-json.txt || echo "File not found"
+        echo "=========================================="
+
     - name: Read Karate JSON Result
       id: read-json
       if: ${{ env.SKIP_TESTS == 'false' }}
@@ -63,32 +70,83 @@ jobs:
           const fs = require('fs');
           const jsonString = fs.readFileSync('target/karate-reports/karate-summary-json.txt', 'utf8');
           const json = JSON.parse(jsonString);
-          const testStatus = json.scenariosFailed > 0 || json.featuresFailed > 0 ? "FAILED 🔴" : "PASSED 🟢";
-          const slackStatus = json.scenariosFailed > 0 ? 'FAILED :red_circle:' : 'PASSED :large_green_circle:';
+          
+          // Debug: Log the entire JSON structure to understand field names
+          console.log('=== Full JSON structure ===');
+          console.log(JSON.stringify(json, null, 2));
+          console.log('==========================');
+          
+          // Handle different possible field name variations and nested structures
+          let scenariosFailed = 0;
+          let scenariosPassed = 0;
+          let featuresFailed = 0;
+          let featuresPassed = 0;
+          
+          // Check if scenarios/features are nested objects
+          if (json.scenarios && typeof json.scenarios === 'object') {
+            scenariosFailed = json.scenarios.failed || json.scenarios.Failed || 0;
+            scenariosPassed = json.scenarios.passed || json.scenarios.Passed || 0;
+          } else {
+            scenariosFailed = json.scenariosFailed || json.scenariosfailed || json.scenarios_failed || 0;
+            scenariosPassed = json.scenariosPassed || json.scenariospassed || json.scenarios_passed || 0;
+          }
+          
+          if (json.features && typeof json.features === 'object') {
+            featuresFailed = json.features.failed || json.features.Failed || 0;
+            featuresPassed = json.features.passed || json.features.Passed || 0;
+          } else {
+            featuresFailed = json.featuresFailed || json.featuresfailed || json.features_failed || 0;
+            featuresPassed = json.featuresPassed || json.featurespassed || json.features_passed || 0;
+          }
+          
+          // Handle elapsed time - check multiple field names and handle milliseconds
+          let elapsedTime = json.elapsedTime || json.elapsedtime || json.elapsed_time || json.elapsed || 0;
+          // If elapsed time is > 1000, it's likely in milliseconds, convert to seconds
+          if (elapsedTime > 1000) {
+            elapsedTime = (elapsedTime / 1000).toFixed(2);
+          } else {
+            elapsedTime = parseFloat(elapsedTime).toFixed(2);
+          }
+          
+          // Handle thread time - check multiple field names and handle milliseconds
+          let threadTime = json.threadTime || json.threadtime || json.thread_time || 0;
+          // If thread time is > 1000, it's likely in milliseconds, convert to seconds
+          if (threadTime > 1000) {
+            threadTime = (threadTime / 1000).toFixed(2);
+          } else {
+            threadTime = parseFloat(threadTime).toFixed(2);
+          }
+          
+          const threads = json.threads || json.threadCount || 5;
           
           // Calculate efficiency
-          const efficiency = json.threadTime > 0 ? (json.elapsedTime / json.threadTime).toFixed(2) : '0.00';
+          const threadTimeNum = parseFloat(threadTime);
+          const elapsedTimeNum = parseFloat(elapsedTime);
+          const efficiency = threadTimeNum > 0 ? (elapsedTimeNum / threadTimeNum).toFixed(2) : '0.00';
+          
+          const testStatus = scenariosFailed > 0 || featuresFailed > 0 ? "FAILED 🔴" : "PASSED 🟢";
+          const slackStatus = scenariosFailed > 0 ? 'FAILED :red_circle:' : 'PASSED :large_green_circle:';
           
           // Log outputs for debug
-          console.log(`Scenarios Passed: ${json.scenariosPassed}`);
-          console.log(`Scenarios Failed: ${json.scenariosFailed}`);
-          console.log(`Features Passed: ${json.featuresPassed}`);
-          console.log(`Features Failed: ${json.featuresFailed}`);
+          console.log(`Scenarios Passed: ${scenariosPassed}`);
+          console.log(`Scenarios Failed: ${scenariosFailed}`);
+          console.log(`Features Passed: ${featuresPassed}`);
+          console.log(`Features Failed: ${featuresFailed}`);
           console.log(`Test Status: ${testStatus}`);
-          console.log(`Elapsed Time: ${json.elapsedTime}s`);
-          console.log(`Threads: ${json.threads}`);
-          console.log(`Thread Time: ${json.threadTime}s`);
+          console.log(`Elapsed Time: ${elapsedTime}s`);
+          console.log(`Threads: ${threads}`);
+          console.log(`Thread Time: ${threadTime}s`);
           console.log(`Efficiency: ${efficiency}`);
           
-          core.setOutput('scenariosFailed', json.scenariosFailed || 0);
-          core.setOutput('scenariosPassed', json.scenariosPassed || 0);
-          core.setOutput('featuresFailed', json.featuresFailed || 0);
-          core.setOutput('featuresPassed', json.featuresPassed || 0);
+          core.setOutput('scenariosFailed', scenariosFailed);
+          core.setOutput('scenariosPassed', scenariosPassed);
+          core.setOutput('featuresFailed', featuresFailed);
+          core.setOutput('featuresPassed', featuresPassed);
           core.setOutput('testStatus', testStatus);
           core.setOutput('slackStatus', slackStatus);
-          core.setOutput('elapsedTime', json.elapsedTime || 0);
-          core.setOutput('threads', json.threads || 5);
-          core.setOutput('threadTime', json.threadTime || 0);
+          core.setOutput('elapsedTime', elapsedTime);
+          core.setOutput('threads', threads);
+          core.setOutput('threadTime', threadTime);
           core.setOutput('efficiency', efficiency);
 
     - name: Set Local Report URL

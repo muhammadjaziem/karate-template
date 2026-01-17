@@ -4,7 +4,7 @@ Feature: Simple API Test with Karate
   Background:
     * url 'https://jsonplaceholder.typicode.com'
 
-  Scenario: Get posts and verify response
+  Scenario: Get posts and verify responsq
     Given path 'posts'
     When method get
     Then status 200

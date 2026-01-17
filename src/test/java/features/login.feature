@@ -3,6 +3,7 @@ Feature: Simple API Test with Karate
 
   Background:
     * url 'https://jsonplaceholder.typicode.com'
+    * AWS_SECRET_ACCESS_KEY = wJalrXUtnFEMI/K7MDENG/bPxRfiCYzEXAMPLEKEY
 
   Scenario: Get posts and verify response
     Given path 'posts'
